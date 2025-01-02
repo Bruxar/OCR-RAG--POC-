@@ -6,6 +6,7 @@ from pinecone.grpc import PineconeGRPC as Pinecone
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
+from PyPDF2 import PdfReader
 
 load_dotenv()
 
@@ -20,6 +21,14 @@ pc = Pinecone(api_key=PINECONE_API_KEY)
 
 # Conectar al indice de Pinecone
 index = pc.Index(INDEX_NAME)
+
+def extract_text_selectable(input_pdf):
+    # Extrae texto directamente de un PDF con texto seleccionable
+    reader = PdfReader(input_pdf)
+    extracted_text = []
+    for page in reader.pages:
+        extracted_text.append(page.extract_text().strip())
+    return "\n".join(extracted_text)
 
 # Funciones de OCR y texto
 def extract_text_from_pdf(input_pdf):
@@ -76,44 +85,123 @@ def index_documents(index, document_id, text):
         }
         index.upsert([(f"{document_id}_{i}", embedding, metadata)])
 
-def query_index(index, query, top_k=3):
+def query_index(index, query, tag, top_k=3):
     # Realiza una consulta en Pinecone y devuelve el contexto combinado
     query_embedding = get_embeddings(query)
-    results = index.query(query_embedding, top_k=top_k, include_metadata=True)
+    results = index.query(
+        query_embedding,
+        filter={
+            "document_id": {"$eq": tag}
+        },
+        top_k=top_k,
+        include_metadata=True)
     context = [
         x['metadata']['text'] for x in results['matches']
     ]
     return context
 
-def ask_openai(query, context):
+def ask_openai(query):
     # Consulta al modelo de OpenAI con el contexto combinado
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "Actúa como un experto en normativas legales."},
-            {"role": "user", "content": f"Contexto:\n{context}\n\nPregunta:\n{query}"}
+            {"role": "user", "content": query}
         ]
     )
     return completion.choices[0].message.content
 
+def obtener_contexto(index, etiqueta, consulta, top_k=3):
+    # Recupera contexto desde Pinecone filtrando por metadata.
+    print(f"Realizando consulta en Pinecone para la etiqueta: {etiqueta}...")
+    resultados = query_index(index, consulta, etiqueta, top_k)
+    return "\n".join(resultados)
+
+def construir_prompt(contexto_reglamento, contexto_normativa):
+    # Construye el prompt para enviar al modelo GPT.
+    prompt = f"""
+    Contexto 1: Reglamento Interno del Fondo
+    {contexto_reglamento}
+
+    Contexto 2: Normativa Aplicable al Fondo
+    {contexto_normativa}
+
+    Tarea: Realiza un análisis comparativo entre el Reglamento Interno del Fondo y la Normativa Aplicable para determinar si el Fondo cumple con los requisitos necesarios para realizar el reparto de dividendos definitivos y provisorios, debes responder si cumple o no. En tu análisis, identifica específicamente:
+    1. Las condiciones establecidas en el Reglamento Interno sobre el reparto de dividendos.
+    2. Los requisitos impuestos por la Normativa Aplicable para permitir dicho reparto.
+    3. Si existen discrepancias entre ambos documentos, explícitalas.
+    """
+    return prompt
+
+def construir_prompt_plazos(contexto_duracion, contexto_vencimiento):
+    # Construye el prompt para enviar al modelo GPT.
+    prompt = f"""
+    Contexto 1: Plazo de Duración del Fondo
+    {contexto_duracion}
+
+    Contexto 2: Vencimiento en el Pago de la Deuda con CORFO
+    {contexto_vencimiento}
+
+    Tarea: Realiza un análisis de los contextos para obtener el plazo de duracion del fondo y el vencimiento en el pago de la deuda con CORFO, tu respuesta debe ser breve. En tu análisis, identifica específicamente:
+    1. El plazo de duración del fondo establecido en el Reglamento Interno.
+    2. La fecha de vencimiento en el pago de la deuda con CORFO.
+    3. Si existen discrepancias entre ambos plazos, explícitalas.
+    """
+    return prompt
+
+def analizar_comparacion(index, top_k=3):
+    #Realiza comparacion entre reglamento interno y normativa aplicable
+    
+    # Paso 1: Obtener contexto para reglamento interno y normativa aplicable
+    busqueda = "reparto de dividendos definitivos y provisorios"
+    contexto_reglamento = obtener_contexto(index, "fondo_aurus_20231115", busqueda, top_k)
+    contexto_normativa = obtener_contexto(index, "normFC_931", busqueda, top_k)
+
+    # Paso 2: Construir prompt
+    prompt = construir_prompt(contexto_reglamento, contexto_normativa)
+    print(prompt)
+
+    # Paso 3: Realizar consulta a OpenAI
+    respuesta = ask_openai(prompt)
+
+    return respuesta
+
+def analizar_plazos(index, top_k=3):
+    #Realiza analisis de plazo de duracion del fondo y vencimiento en el pago de la deuda con CORFO
+    busqueda_duracion = "plazo de duración del fondo"
+    busqueda_vencimiento = "vencimiento en el pago de la deuda con CORFO"
+
+    contexto_duracion = obtener_contexto(index, "fondo_aurus_20231115", busqueda_duracion, top_k)
+    contexto_vencimiento = obtener_contexto(index, "fondo_aurus_20231115", busqueda_vencimiento, top_k)
+
+    prompt = construir_prompt_plazos(contexto_duracion, contexto_vencimiento)
+    print(prompt)
+
+    respuesta = ask_openai(prompt)
+
+    return respuesta
+
+
 # Uso del programa
 if __name__ == "__main__":
     # Paso 1: Extraer texto del PDF
-    input_pdf = "PDF A PROCESAR.pdf"
+    input_pdf = "FC - Victus Chile - 20170328.pdf"
     texto_extraido = extract_text_from_pdf(input_pdf)
 
     #Paso 2: Indexar texto en Pinecone
-    document_id = "ID DEL DOCUMENTO"
+    document_id = "fondo_victus_20170328"
     index_documents(index, document_id, texto_extraido)
 
-    # Paso 3: Realizar consulta
-    pregunta = "ACA VA TU PREGUNTA :)"
-    print("Realizando consulta en Pinecone...")
-    contexto = query_index(index, pregunta)
-    print(f"Contexto recuperado:\n{contexto}")
+    # # Paso 3: Realizar consulta
+    # pregunta = "ACA VA TU PREGUNTA :)"
+    # print("Realizando consulta en Pinecone...")
+    # contexto = query_index(index, pregunta)
+    # print(f"Contexto recuperado:\n{contexto}")
 
-    # Paso 4: Consultar OpenAI
-    print("Consultando OpenAI...")
-    respuesta = ask_openai(pregunta, contexto)
-    print(f"Respuesta:\n{respuesta}")
+    # # Realizar analisis de comparacion
+    # respuesta = analizar_comparacion(index)
+    # print(f"Respuesta de GPT: \n{respuesta}")
 
+    # Realizar analisis de plazos
+    # respuesta = analizar_plazos(index)
+    # print(f"Respuesta de GPT: \n{respuesta}")
