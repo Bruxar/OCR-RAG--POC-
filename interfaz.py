@@ -1,13 +1,44 @@
 import streamlit as st
-from procesamiento import index, analizar_comparacion, analizar_plazos
+from procesamiento import index, extract_text_from_pdf, index_documents, analizar_comparacion, analizar_plazos
+import os
+import tempfile
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Análisis de Reglamentos",
+    page_title="Análisis de Fondos",
     page_icon="📜",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
+
+# Sidebar para subir y procesar PDFs
+st.sidebar.header("📂 Subir y Procesar PDF")
+
+# Subir archivo
+uploaded_file = st.sidebar.file_uploader("Sube un nuevo archivo PDF", type=["pdf"])
+
+if uploaded_file:
+    st.sidebar.write(f"📄 Archivo subido: **{uploaded_file.name}**")
+
+    # Boton para procesar el archivo
+    if st.sidebar.button("Procesar e Indexar"):
+        with st.spinner("📖 Extrayendo texto con OCR..."):
+            # Guardar el archivo temporalmente
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+                temp_pdf.write(uploaded_file.read())
+                temp_pdf_path = temp_pdf.name
+
+            # Extraer texto mediante OCR
+            extracted_text = extract_text_from_pdf(temp_pdf_path)
+
+        with st.spinner("🔄 Indexando en Pinecone..."):
+            # Generar document_id dinámico basado en el nombre del archivo
+            document_id = os.path.splitext(uploaded_file.name)[0]
+
+            index_documents(index, document_id, extracted_text)
+
+        # Mensaje de éxito
+        st.sidebar.success(f"✅ Documento indexado exitosamente con ID: **{document_id}**")
 
 # Título principal
 st.title("📊 **Análisis de Reglamentos y Normativas**")
@@ -19,6 +50,10 @@ st.markdown(
 # Inicializar historial de chat
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "current_fondo" not in st.session_state:
+    st.session_state.current_fondo = None
+if "current_normativa" not in st.session_state:
+    st.session_state.current_normativa = None
 
 # Contenedor de botones
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -27,33 +62,47 @@ col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
     if st.button("💡 Generar Respuesta de Comparación"):
         user_question = "¿El reglamento cumple los requisitos para repartir dividendos?"
+        respuesta, fondo, normativa = analizar_comparacion(index)
         st.session_state.chat_history.insert(0, {"role": "user", "content": user_question})
-        respuesta = analizar_comparacion(index)
         st.session_state.chat_history.insert(1, {"role": "assistant", "content": respuesta})
+        st.session_state.current_fondo = fondo
+        st.session_state.current_normativa = normativa
 
 # Botón para generar respuesta de plazos
 with col2:
     if st.button("🕒 Generar Respuesta de Plazos"):
         user_question = "¿Cuál es el plazo de duración del fondo y el vencimiento de la deuda?"
+        respuesta, fondo = analizar_plazos(index)
         st.session_state.chat_history.insert(0, {"role": "user", "content": user_question})
-        respuesta = analizar_plazos(index)
         st.session_state.chat_history.insert(1, {"role": "assistant", "content": respuesta})
+        st.session_state.current_fondo = fondo
 
 # Botón para limpiar el chat
 with col3:
     if st.button("🧹 Limpiar Chat"):
         st.session_state.chat_history = []
+        st.session_state.current_fondo = None
+        st.session_state.current_normativa = None
 
-# Contenedor de mensajes
+# Mostrar fondo y normativa actuales
+st.markdown("### 📄 Información de Análisis")
+if st.session_state.current_fondo and st.session_state.current_normativa:
+    st.write(f"**Fondo Actual:** {st.session_state.current_fondo}")
+    st.write(f"**Normativa Correspondiente:** {st.session_state.current_normativa}")
+else:
+    st.write("No hay información de fondo y normativa seleccionada.")
+
+# Contenedor de mensajes con scroll
 st.header("💬 **Chat de Análisis**")
+st.write("Aquí puedes ver el historial de interacciones con el modelo.")
 
-# Mostrar el historial de chat en bloques con `st.chat_message`
-for i in range(0, len(st.session_state.chat_history), 2):
-    if i < len(st.session_state.chat_history):
-        user_message = st.session_state.chat_history[i]
-        with st.chat_message("user"):
-            st.write(user_message["content"])
-    if i + 1 < len(st.session_state.chat_history):
-        assistant_message = st.session_state.chat_history[i + 1]
-        with st.chat_message("assistant"):
-            st.write(assistant_message["content"])
+with st.container():
+    for i in range(0, len(st.session_state.chat_history), 2):
+        if i < len(st.session_state.chat_history):
+            user_message = st.session_state.chat_history[i]
+            with st.chat_message("user"):
+                st.write(user_message["content"])
+        if i + 1 < len(st.session_state.chat_history):
+            assistant_message = st.session_state.chat_history[i + 1]
+            with st.chat_message("assistant"):
+                st.write(assistant_message["content"])

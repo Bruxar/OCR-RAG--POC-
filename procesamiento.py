@@ -152,10 +152,13 @@ def construir_prompt_plazos(contexto_duracion, contexto_vencimiento):
 def analizar_comparacion(index, top_k=4):
     #Realiza comparacion entre reglamento interno y normativa aplicable
     
+    fondo = "fondo_devlabs_20210504"
+    normativa = "normFET_138"
+
     # Paso 1: Obtener contexto para reglamento interno y normativa aplicable
     busqueda = "reparto de dividendos definitivos y provisorios"
-    contexto_reglamento = obtener_contexto(index, "fondo_devlabs_20210504", busqueda, top_k)
-    contexto_normativa = obtener_contexto(index, "normFET_138", busqueda, top_k)
+    contexto_reglamento = obtener_contexto(index, fondo, busqueda, top_k)
+    contexto_normativa = obtener_contexto(index, normativa, busqueda, top_k)
 
     # Paso 2: Construir prompt
     prompt = construir_prompt(contexto_reglamento, contexto_normativa)
@@ -164,23 +167,24 @@ def analizar_comparacion(index, top_k=4):
     # Paso 3: Realizar consulta a OpenAI
     respuesta = ask_openai(prompt)
 
-    return respuesta
+    return respuesta, fondo, normativa
 
 def analizar_plazos(index, top_k=4):
     #Realiza analisis de plazo de duracion del fondo y vencimiento en el pago de la deuda con CORFO
     busqueda_duracion = "plazo de duración del fondo"
     busqueda_vencimiento = "vencimiento en el pago de la deuda con CORFO"
 
+    fondo = "fondo_devlabs_20210504"
 
-    contexto_duracion = obtener_contexto(index, "fondo_devlabs_20210504", busqueda_duracion, top_k)
-    contexto_vencimiento = obtener_contexto(index, "fondo_devlabs_20210504", busqueda_vencimiento, top_k)
+    contexto_duracion = obtener_contexto(index, fondo, busqueda_duracion, top_k)
+    contexto_vencimiento = obtener_contexto(index, fondo, busqueda_vencimiento, top_k)
 
     prompt = construir_prompt_plazos(contexto_duracion, contexto_vencimiento)
     print(prompt)
 
     respuesta = ask_openai(prompt)
 
-    return respuesta
+    return respuesta, fondo
 
 __all__ = [
     "extract_text_from_pdf",
