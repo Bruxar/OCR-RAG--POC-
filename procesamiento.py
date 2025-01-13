@@ -100,6 +100,33 @@ def query_index(index, query, tag, top_k=3):
     ]
     return context
 
+def get_all_document_ids(index):
+    """
+    Recupera todos los document_id únicos desde el índice de Pinecone.
+    """
+    document_ids = set()
+
+    # Define un rango grande basado en el número total de vectores
+    response = index.describe_index_stats()
+    total_vectors = response.get('total_vector_count', 0)
+
+    # Iterar sobre IDs si son secuenciales o tienen un patrón predecible
+    for i in range(total_vectors):
+        vector_id = str(i)  # Si tus IDs no son secuenciales, ajusta este patrón
+        try:
+            response = index.fetch(ids=[vector_id])
+            vectors = response.get('vectors', {})
+
+            for vector_data in vectors.values():
+                metadata = vector_data.get('metadata', {})
+                if 'document_id' in metadata:
+                    document_ids.add(metadata['document_id'])
+
+        except Exception as e:
+            print(f"Error al obtener el vector {vector_id}: {e}")
+
+    return list(document_ids)
+
 def ask_openai(query):
     # Consulta al modelo de OpenAI con el contexto combinado
     completion = client.chat.completions.create(
