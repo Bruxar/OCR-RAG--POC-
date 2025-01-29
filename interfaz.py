@@ -41,30 +41,30 @@ if uploaded_file:
         st.sidebar.success(f"✅ Documento indexado exitosamente con ID: **{document_id}**")
 
 # Recuperar document_id desde Pinecone
-with st.sidebar:
-    st.header("⚙️ Configuración de Análisis")
-    st.write("Selecciona el fondo y la normativa aplicable para realizar los análisis.")
+# with st.sidebar:
+#     st.header("⚙️ Configuración de Análisis")
+#     st.write("Selecciona el fondo y la normativa aplicable para realizar los análisis.")
 
-    # Recuperar todos los document_id dinamicamente
-    document_ids = get_all_document_ids(index)
+#     # Recuperar todos los document_id dinamicamente
+#     document_ids = get_all_document_ids(index)
 
-    # Dropdowns dinamicos
-    fondo = st.selectbox("Selecciona el Reglamento del Fondo", options=document_ids, key="fondo")
-    normativa = st.selectbox("Selecciona la Normativa Aplicable", options=document_ids, key="normativa")
+#     # Dropdowns dinamicos
+#     fondo = st.selectbox("Selecciona el Reglamento del Fondo", options=document_ids, key="fondo")
+#     normativa = st.selectbox("Selecciona la Normativa Aplicable", options=document_ids, key="normativa")
 
-    # Mensaje de confirmación
-    st.write(f"📄 Fondo seleccionado: **{fondo}**")
-    st.write(f"⚖️ Normativa seleccionada: **{normativa}**")
+#     # Mensaje de confirmación
+#     st.write(f"📄 Fondo seleccionado: **{fondo}**")
+#     st.write(f"⚖️ Normativa seleccionada: **{normativa}**")
 
-    # Boton para actualizar
-    if st.button("Actualizar Selección"):
-        st.session_state.selected_fondo = fondo
-        st.session_state.selected_normativa = normativa
+#     # Boton para actualizar
+#     if st.button("Actualizar Selección"):
+#         st.session_state.selected_fondo = fondo
+#         st.session_state.selected_normativa = normativa
 
-# Mostrar la selección actual
-st.markdown("### 📄 Información de Análisis Seleccionada")
-st.write(f"**Fondo Actual:** {st.session_state.get('selected_fondo', 'No seleccionado')}")
-st.write(f"**Normativa Actual:** {st.session_state.get('selected_normativa', 'No seleccionada')}")
+# # Mostrar la selección actual
+# st.markdown("### 📄 Información de Análisis Seleccionada")
+# st.write(f"**Fondo Actual:** {st.session_state.get('selected_fondo', 'No seleccionado')}")
+# st.write(f"**Normativa Actual:** {st.session_state.get('selected_normativa', 'No seleccionada')}")
 
 # Título principal
 st.title("📊 **Análisis de Reglamentos y Normativas**")

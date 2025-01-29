@@ -7,6 +7,7 @@ from openai import OpenAI
 import os
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
+import requests
 
 load_dotenv()
 
@@ -15,6 +16,10 @@ PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_ENVIRONMENT = os.getenv("PINECONE_ENVIRONMENT")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 INDEX_NAME = os.getenv("INDEX_NAME")
+OLLAMA_SERVER_IP = os.getenv("OLLAMA_SERVER_IP")
+OLLAMA_SERVER_PORT = os.getenv("OLLAMA_SERVER_PORT")
+
+OLLAMA_SERVER_URL = f"http://{OLLAMA_SERVER_IP}:{OLLAMA_SERVER_PORT}/api/generate"
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
@@ -127,17 +132,41 @@ def get_all_document_ids(index):
 
     return list(document_ids)
 
-def ask_openai(query):
-    # Consulta al modelo de OpenAI con el contexto combinado
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Actúa como un experto en normativas legales."},
-            {"role": "user", "content": query}
-        ]
-    )
-    return completion.choices[0].message.content
+# def ask_openai(query):
+#     # Consulta al modelo de OpenAI con el contexto combinado
+#     completion = client.chat.completions.create(
+#         model="gpt-4o-mini",
+#         messages=[
+#             {"role": "system", "content": "Actúa como un experto en normativas legales."},
+#             {"role": "user", "content": query}
+#         ]
+#     )
+#     return completion.choices[0].message.content
 
+# Consultar al modelo Ollama
+def ask_ollama(prompt):
+    # Crear el payload de la solicitud
+    payload = {
+        "model": "llama3.2:latest",
+        "prompt": prompt,
+        "raw": True,
+        "stream": False
+    }
+    # Realizar la solicitud al servidor de ollama
+    try:
+        response = requests.post(OLLAMA_SERVER_URL, json=payload)
+        # Verificar si la solicitud fue exitosa
+        if response.status_code == 200:
+            data = response.json()
+            # La respuesta del modelo se encuentra en 'response'
+            print("Prompt: ", prompt)
+            print("Respuesta del modelo: ", data.get("response", "Sin respuesta"))
+            return data.get("response", "Sin respuesta")
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    except requests.exceptions.RequestException as e:
+        print("Error al conectarse al servidor Ollama: ", e)
+    
 def obtener_contexto(index, etiqueta, consulta, top_k=4):
     # Recupera contexto desde Pinecone filtrando por metadata.
     print(f"Realizando consulta en Pinecone para la etiqueta: {etiqueta}...")
@@ -191,8 +220,9 @@ def analizar_comparacion(index, top_k=4):
     prompt = construir_prompt(contexto_reglamento, contexto_normativa)
     print(prompt)
 
-    # Paso 3: Realizar consulta a OpenAI
-    respuesta = ask_openai(prompt)
+    # Paso 3: Realizar consulta (OpenAI o Ollama)
+    #respuesta = ask_openai(prompt)
+    respuesta = ask_ollama(prompt)
 
     return respuesta, fondo, normativa
 
@@ -209,7 +239,8 @@ def analizar_plazos(index, top_k=4):
     prompt = construir_prompt_plazos(contexto_duracion, contexto_vencimiento)
     print(prompt)
 
-    respuesta = ask_openai(prompt)
+    #respuesta = ask_openai(prompt)
+    respuesta = ask_ollama(prompt)
 
     return respuesta, fondo
 
